@@ -1,0 +1,3 @@
+gpuprof: amd-profiling.cpp
+	g++ -g -o gpuprof amd-profiling.cpp -I/opt/rocm-6.0.2/include/ -I./include/ -L/opt/rocm-6.0.2/lib/ -lrocm_smi64 -lrocprofiler64v2 -lpthread -lamdhip64 -D__HIP_PLATFORM_AMD__
+
