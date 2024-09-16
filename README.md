@@ -19,7 +19,7 @@ export LD_LIBRARY_PATH=/opt/rocm-6.0.2/lib/:$LD_LIBRARY_PATH
 
 Run command
 ```
-./gpuprof --cmd="/work1/sinclair/rnjain/CoralGemm/build/gemm R_64F R_64F R_64F R_64F OP_N OP_T 8640 8640 8640 8640 8640 8640 36 300" --gpus=0
+python rocprofwrap.py --cmd "/work1/sinclair/crhowarth/CoralGemm/build/gemm R_64F R_64F R_64F R_64F OP_N OP_T 8640 8640 8640 8640 8640 8640 36 10” --gpus 0 --prefix “metrics.csv”
 ```
 
 
