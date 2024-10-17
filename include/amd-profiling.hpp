@@ -35,14 +35,6 @@ uint64_t accEnergy;
 
 rsmi_frequencies_t trgSysclk, trgDfclk, trgDcefclk, trgSocclk, trgMemclk, trgPcieclk;
 
-// GPUMetricCurrGfxClk_t currGfxclk;
-// GPUMetricCurrSocClk_t currSocclk;
-// GPUMetricCurrVClk0_t currVclk;
-// GPUMetricCurrDClk0_t currDclk;
-
-// GPUMetricXgmiReadDataAcc_t currXgmiRead, prevXgmiRead;
-// GPUMetricXgmiWriteDataAcc_t currXgmiWrite, prevXgmiWrite;
-
 int64_t currentVoltage;
 int64_t tempEdgeG, tempJunction, tempMemory, tempHbm0, tempHbm1, tempHbm2, tempHbm3;
 
@@ -56,9 +48,9 @@ float ePower = 0.0;
 
 ThreadPool pool(1);
 
-std::string hwCounters[6] = {
-        "SQ_INSTS_VALU_ADD_F32","SQ_INSTS_VALU_MUL_F32","SQ_INSTS_VALU_FMA_F32",
-        "SQ_INSTS_VALU_MFMA_MOPS_F32", "SQ_INSTS_VALU_MFMA_MOPS_BF16","SQ_INSTS_VALU_MFMA_MOPS_F32",
+std::string hwCounters[8] = {
+        "SQ_INSTS_VALU_MFMA_F16", "SQ_INSTS_VALU_MFMA_F32","SQ_INSTS_VALU_MFMA_F64","SQ_INSTS_VALU_MFMA_I8",
+        "SQ_INSTS_VALU_MFMA_MOPS_F16", "SQ_INSTS_VALU_MFMA_MOPS_F32","SQ_INSTS_VALU_MFMA_MOPS_F64","SQ_INSTS_VALU_MFMA_MOPS_I8",
         // "SQ_LDS_IDX_ACTIVE","SQ_LDS_BANK_CONFLICT","TCP_TOTAL_CACHE_ACCESSES_sum",
         // "TCP_TCC_READ_REQ_sum","TCP_TCC_WRITE_REQ_sum","TCC_EA_RDREQ_DRAM_sum",
         // "TCC_EA_WRREQ_DRAM_sum","TCC_EA_RDREQ_32B_sum","TCC_EA_WRREQ_64B_sum"
@@ -107,7 +99,8 @@ void hwCounterInit(){
     counters.emplace_back("SQ_INSTS_VALU_FMA_F16");
     counters.emplace_back("SQ_INSTS_VALU_TRANS_F16");
     */
-    
+   
+    /*	
     counters.emplace_back("SQ_INSTS_VALU_ADD_F32");
     counters.emplace_back("SQ_INSTS_VALU_MUL_F32");
     counters.emplace_back("SQ_INSTS_VALU_FMA_F32");
@@ -119,11 +112,16 @@ void hwCounterInit(){
     counters.emplace_back("SQ_INSTS_VALU_FMA_F64");
     counters.emplace_back("SQ_INSTS_VALU_TRANS_F64");
     */
-    counters.emplace_back("SQ_INSTS_VALU_MFMA_MOPS_BF16");
+    counters.emplace_back("SQ_INSTS_VALU_MFMA_F16");
+    counters.emplace_back("SQ_INSTS_VALU_MFMA_F32");
+    counters.emplace_back("SQ_INSTS_VALU_MFMA_F64");
+    counters.emplace_back("SQ_INSTS_VALU_MFMA_I8");
+
+    counters.emplace_back("SQ_INSTS_VALU_MFMA_MOPS_F16");
     counters.emplace_back("SQ_INSTS_VALU_MFMA_MOPS_F32");
     counters.emplace_back("SQ_INSTS_VALU_MFMA_MOPS_F64");
+    counters.emplace_back("SQ_INSTS_VALU_MFMA_MOPS_I8");
     
-
     // FLOPS
     // counters.emplace_back("SQ_INSTS_VALU_ADD_F32");
     // counters.emplace_back("SQ_INSTS_VALU_MUL_F32");
@@ -161,7 +159,7 @@ void signal_callback_handler(int signum) {
 void header(std::ofstream &output){
     
     std::string header = 
-        "avg_power,energy_acc_computed,curr_power,energy_acc,";
+        "avg_power,power_from_e,";
         // "gpu_busy_percent,mem_busy_percent,"
         // "vddgfx_volt,temp_edge,temp_junct,temp_mem,"
         // "temp_hbm0,temp_hbm1,temp_hbm2,temp_hbm3,"
@@ -211,7 +209,7 @@ void writeData(std::ofstream &output){
         ePower = resolution * (currEnergy - prevEnergy) / 1000000.0 / ((timeStamp1-prevTimeStamp) / 1000000000.0);
     }
 
-    output << power/1000000.0 << "," << ePower << "," << currPower << "," << accEnergy << ","; 
+    output << power/1000000.0 << "," << ePower << ","; 
     // output << gpuBusyPercent << "," << memBusyPercent << "," << currentVoltage << ",";
     // output << tempEdge/1000.0 << "," << tempJunction/1000.0 << "," << tempMemory/1000.0 << "," << tempHbm0/1000.0 << "," << tempHbm1/1000.0 << ",";
     // output << tempHbm2/1000.0 << "," << tempHbm3/1000.0 << ",";
@@ -269,7 +267,7 @@ void getData(){
     //rsmi sampling gpu metrics
     rsmi_dev_power_ave_get( device, 0, &power );
     rsmi_dev_energy_count_get( device, &currEnergy, &resolution, &etimeStamp );
-    rsmi_dev_current_socket_power_get( device, &currPower );
+    // rsmi_dev_current_socket_power_get( device, &currPower );
     // rsmi_dev_metrics_energy_acc_get(device, &accEnergy);
     // rsmi_dev_busy_percent_get( device, &gpuBusyPercent );
     // rsmi_dev_memory_busy_percent_get( device, &memBusyPercent );
