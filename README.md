@@ -5,8 +5,7 @@ Lightweight C++ wrapper using RSMI API Library calls for 1ms profiling of power,
 API calls have been tested with rocm v6.0.2. Compatibility with other rocm versions is not guranteed. 
 ```
 git clone https://github.com/hal-uw/rocprofwrap.git 
-module load rocm/6.0.2
-make
+module load rocm/6.1.2
 ```
 
 ## Export Relevant Paths
@@ -15,6 +14,7 @@ make
 export WRAPPER_ROOT=/work1/sinclair/rnjain/hal-uw/rocprofwrap
 export HSA_TOOLS_LIB=/opt/rocm-6.1.2/lib/librocprofiler64.so.1
 export LD_LIBRARY_PATH=/opt/rocm-6.1.2/lib/:$LD_LIBRARY_PATH
+make
 ```
 
 Run command
