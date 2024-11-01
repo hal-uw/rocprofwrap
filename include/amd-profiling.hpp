@@ -121,7 +121,7 @@ void hwCounterInit() {
   // just emplace from the hw_counters set as the same order
   // traverse the hw_counters and emplace them into the counters
   for (auto &counter : hwCounters) {
-    counters.emplace_back(counter);
+    counters.emplace_back(counter.c_str());
   }
 
   // FLOPS
