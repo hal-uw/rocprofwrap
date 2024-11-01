@@ -120,7 +120,7 @@ void hwCounterInit() {
   // counters.emplace_back("SQ_INSTS_VALU_MFMA_MOPS_I8");
   // just emplace from the hw_counters set as the same order
   // traverse the hw_counters and emplace them into the counters
-  for (auto &counter : hw_counters) {
+  for (auto &counter : hwCounters) {
     counters.emplace_back(counter);
   }
 
