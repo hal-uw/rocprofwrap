@@ -23,13 +23,20 @@ def cleanUp():
 parser = argparse.ArgumentParser(
     prog="rocprofwrap",
     description="Profiles power,frequency, voltage, and performance counters for MI products.",
-    epilog="Example: python run.py --cmd=\"ls -lh\" --gpus=0 --prefix=metrics.csv --redirect=logfile.txt"
+    epilog="Example: python run.py --cmd=\"ls -lh\" --gpus=0 --prefix=metrics.csv --redirect=logfile.txt --counters_file=counters.json"
 )
 
 parser.add_argument("--cmd", help="Application command", required=True)
 parser.add_argument("--gpus", default="0", help="List of GPUs to profile "+"(default: %(default)s)", required=True)
 parser.add_argument("--prefix", default="metrics.csv", help="Filename prefix for data output "+"(default: %(default)s)", required=True)
 parser.add_argument("--redirect", default=None, help="Filename for stdout log file.")
+# add one more argument to specify the counters included in file to profile
+parser.add_argument("--counters_file",
+                    default=None,
+                    help="Optional JSON file containing hardware counter configurations. "
+                         "If not provided, default counters will be used.",required=False)
+
+
 
 args = parser.parse_args()
 
@@ -37,6 +44,7 @@ CMD = args.cmd
 GPUS = args.gpus.split(",")
 PREFIX = args.prefix
 REDIRECT = args.redirect
+COUNTERS_FILE = args.counters_file
 
 
 profProc = []
@@ -49,6 +57,13 @@ if "WRAPPER_ROOT" not in os.environ:
 try:
     for gid in GPUS:
         ps = [os.getenv("WRAPPER_ROOT")+"/gpuprof", PREFIX+"_"+gid, gid]
+
+        # Add counters file if provided
+        if COUNTERS_FILE is not None:
+            if os.path.exists(COUNTERS_FILE):
+                ps.append(COUNTERS_FILE)
+            else:
+                print(f"Warning: Counters file {COUNTERS_FILE} not found. Using default counters.")
         profProc.append(subprocess.Popen(ps))
 except Exception as e:
     stopProf()
