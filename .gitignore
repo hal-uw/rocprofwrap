@@ -32,3 +32,4 @@
 *.app
 # the vscode dir
 .vscode
+.idea
