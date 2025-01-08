@@ -32,3 +32,5 @@
 *.app
 # the vscode dir
 .vscode
+.idea
+.DS_Store
