@@ -206,7 +206,7 @@ void writeData(std::ofstream &output) {
              ((timeStamp1 - prevTimeStamp) / 1000000000.0);
   }
 
-  output << power / 1000000.0 << "," << ePower << ",";
+  output << power / 1000000.0 << "," << ePower << ","<<currentVoltage<<",";
   // output << gpuBusyPercent << "," << memBusyPercent << "," << currentVoltage
   // << ","; output << tempEdge/1000.0 << "," << tempJunction/1000.0 << "," <<
   // tempMemory/1000.0 << "," << tempHbm0/1000.0 << "," << tempHbm1/1000.0 <<
