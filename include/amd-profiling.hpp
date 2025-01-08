@@ -205,7 +205,7 @@ void writeData(std::ofstream &output) {
     ePower = resolution * (currEnergy - prevEnergy) / 1000000.0 /
              ((timeStamp1 - prevTimeStamp) / 1000000000.0);
   }
-
+  // add the voltage here
   output << power / 1000000.0 << "," << ePower << ","<<currentVoltage<<",";
   // output << gpuBusyPercent << "," << memBusyPercent << "," << currentVoltage
   // << ","; output << tempEdge/1000.0 << "," << tempJunction/1000.0 << "," <<
@@ -271,8 +271,8 @@ void getData() {
   // rsmi_dev_metrics_energy_acc_get(device, &accEnergy);
   // rsmi_dev_busy_percent_get( device, &gpuBusyPercent );
   // rsmi_dev_memory_busy_percent_get( device, &memBusyPercent );
-  // rsmi_dev_volt_metric_get( device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT,
-  // &currentVoltage ); rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_EDGE,
+  rsmi_dev_volt_metric_get(device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT,&currentVoltage); 
+  //rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_EDGE,
   // RSMI_TEMP_CURRENT, &tempEdge ); rsmi_dev_temp_metric_get( device,
   // RSMI_TEMP_TYPE_JUNCTION, RSMI_TEMP_CURRENT, &tempJunction );
   // rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_MEMORY, RSMI_TEMP_CURRENT,
