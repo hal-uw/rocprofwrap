@@ -156,7 +156,7 @@ void signal_callback_handler(int signum) { stop = 1; }
 
 void header(std::ofstream &output) {
 
-  std::string header = "avg_power,power_from_e,vddgfx_volt";
+  std::string header = "avg_power,power_from_e,vddgfx_volt,";
   // "gpu_busy_percent,mem_busy_percent,"
   // "vddgfx_volt,temp_edge,temp_junct,temp_mem,"
   // "temp_hbm0,temp_hbm1,temp_hbm2,temp_hbm3,"
