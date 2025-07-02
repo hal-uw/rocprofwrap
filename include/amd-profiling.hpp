@@ -14,7 +14,7 @@
 // Global variables
 std::ofstream output;
 rsmi_status_t ret;
-
+const char* status_string;
 hipDeviceProp_t devProp;
 rocprofiler_session_id_t dp_session_id;
 
@@ -267,11 +267,15 @@ void getData() {
   // rsmi sampling gpu metrics
   rsmi_dev_power_ave_get(device, 0, &power);
   rsmi_dev_energy_count_get(device, &currEnergy, &resolution, &etimeStamp);
-  rsmi_dev_current_socket_power_get( device, &currPower );
+  rsmi_status_t status = rsmi_dev_current_socket_power_get( device, &currPower);
+  if (status != RSMI_STATUS_SUCCESS) {
+    rsmi_status_string(status, &status_string);
+    std::cout << "Status description: " << status_string << std::endl;
+  }
   // rsmi_dev_metrics_energy_acc_get(device, &accEnergy);
   // rsmi_dev_busy_percent_get( device, &gpuBusyPercent );
   // rsmi_dev_memory_busy_percent_get( device, &memBusyPercent );
-  rsmi_dev_volt_metric_get(device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT,&currentVoltage); 
+  rsmi_dev_volt_metric_get(device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT,&currentVoltage);
   //rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_EDGE,
   // RSMI_TEMP_CURRENT, &tempEdge ); rsmi_dev_temp_metric_get( device,
   // RSMI_TEMP_TYPE_JUNCTION, RSMI_TEMP_CURRENT, &tempJunction );
