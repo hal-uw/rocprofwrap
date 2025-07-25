@@ -19,8 +19,8 @@ make
 
 Run command
 ```
-python rocprofwrap.py --cmd "/work1/sinclair/rnjain/CoralGemm/build/gemm R_64F R_64F R_64F R_64F OP_N OP_T 8640 8640 8640 8640 8640 8640 36 10" --gpus 0 --prefix metrics_mi210 [--counters_file "$COUNTER_FILE"]
-python rocprofwrap.py --cmd "/work1/sinclair/rnjain/amd-lab-notes/matrix-cores/mfma_fp32_4x4x1fp32" --gpus 0 --prefix "mfma/mfma_fp32_4x4x1fp32" [--counters_file "$COUNTER_FILE"]
+python $WRAPPER_ROOT/rocprofwrap.py --cmd "/work1/sinclair/rnjain/CoralGemm/build/gemm R_64F R_64F R_64F R_64F OP_N OP_T 8640 8640 8640 8640 8640 8640 36 10" --gpus 0 --prefix metrics_mi210 [--counters_file "$COUNTER_FILE"]
+python $WRAPPER_ROOT/rocprofwrap.py --cmd "/work1/sinclair/rnjain/amd-lab-notes/matrix-cores/mfma_fp32_4x4x1fp32" --gpus 0 --prefix "mfma/mfma_fp32_4x4x1fp32" [--counters_file "$COUNTER_FILE"]
 # --counters_file is optional
 ```
 
