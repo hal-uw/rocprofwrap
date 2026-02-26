@@ -1,44 +1,36 @@
-# rocprofwrap_lt
+# rocprofwrap_lt [Claude Code Optimized Version]
 
 Lightweight GPU power sampling wrapper for ROCm 7.0 systems with `amd-smi` API.
 
-This tool runs a target application and records per-GPU power/clock samples in parallel using AMD SMI (`amdsmi`).
+Runs a target application and records per-GPU power/clock samples in parallel using AMD SMI (`amdsmi`). All GPUs are handled inside a single multi-threaded binary — no per-GPU processes.
 
 ## Files
 
-- `power_query.cpp`: C++ sampler binary (`amd-smi-query`)
-- `wrapper.py`: Python launcher that starts/stops samplers with your workload
-- `Makefile`: builds `amd-smi-query`
+- `amd_smi_query.cpp`: C++ sampler binary
+- `run_profiler.py`: Python launcher that starts/stops the sampler with your workload
+- `Makefile`: builds `amd_smi_query`
 
 ## What It Does
 
-- Launches one sampler process per selected GPU
+- Launches **one sampler binary** that spawns one sampler thread + one writer thread per selected GPU
 - Launches your application command
-- Stops all samplers automatically when the application exits
-- Writes CSV files like `profiling_result_<prefix>_<device>.csv`
+- Stops all GPU samplers automatically when the application exits
+- Writes binary files like `<prefix>-gpu<id>.bin` (optionally converts to CSV)
 
 ## Requirements
 
 - ROCm installed (default path in `Makefile`: `/opt/rocm-7.1.0`)
 - AMD SMI runtime/library (`libamd_smi`)
-- C++ compiler (`g++` or compatible)
+- C++ compiler with C++17 support (`g++` or compatible)
 - Python 3
 
 ## Build
-
-From `rocprofwrap_lt/`:
 
 ```bash
 make
 ```
 
-This builds:
-
-```bash
-./amd-smi-query
-```
-
-If your ROCm installation is in a different location:
+Custom ROCm path:
 
 ```bash
 make ROCM_DIR=/opt/rocm
@@ -46,87 +38,107 @@ make ROCM_DIR=/opt/rocm
 
 ## Usage
 
-Basic form:
-
 ```bash
-python3 wrapper.py -d "<device_ids>" -p <prefix> -- <your_command>
+python3 run_profiler.py -d "<device_ids>" -p <prefix> -- <your_command>
 ```
 
-Example:
+Example — profile GPUs 0 and 1 while running a training script:
 
 ```bash
-python3 wrapper.py -d "0,1" -p run1 -- python3 gemm.py
+python3 run_profiler.py -d "0,1" -p run1 -- python3 gemm.py
 ```
 
-## Wrapper Options (`wrapper.py`)
+Example — profile all 4 GPUs and convert to CSV when done:
 
-- `-d`, `--devices`: Comma-separated GPU device IDs (required), e.g. `"0"` or `"0,1,2"`
-- `-p`, `--prefix`: Prefix used in output filenames (required)
-- `--query`: Path to `amd-smi-query` binary (optional). Default: `./amd-smi-query` next to `wrapper.py`
-- `--interval-ms`: Sampling interval in milliseconds (optional, default: `1`)
-- `--`: Separator before the target application command (required)
+```bash
+python3 run_profiler.py -d "0,1,2,3" -p run1 --post-convert-csv -- ./my_app
+```
+
+## Wrapper Options (`run_profiler.py`)
+
+| Option               | Default           | Description                                      |
+| -------------------- | ----------------- | ------------------------------------------------ |
+| `-d`, `--devices`    | required          | Comma-separated GPU device IDs, e.g. `"0,1,2,3"` |
+| `-p`, `--prefix`     | required          | Prefix for output filenames                      |
+| `--output-dir`       | `.`               | Directory for output files                       |
+| `--query`            | `./amd_smi_query` | Path to sampler binary                           |
+| `--interval-ms`      | `1`               | Sampling interval in milliseconds                |
+| `--ring-capacity`    | `262144`          | SPSC ring buffer size per GPU (records)          |
+| `--realtime`         | off               | Request `SCHED_FIFO` scheduling (best effort)    |
+| `--mlock`            | off               | Request `mlockall()` (best effort)               |
+| `--post-convert-csv` | off               | Convert `.bin` files to `.csv` after the run     |
+
+CPU core affinity is assigned **automatically** — core 0 is reserved for the OS, sampler threads are pinned to cores 1, 2, 3, … in GPU order.
 
 ## Output
 
-For each selected device, the wrapper writes:
+Binary output (one file per GPU):
 
-```bash
-profiling_result_<prefix>_<device_id>.csv
+```
+<output-dir>/<prefix>-gpu0.bin
+<output-dir>/<prefix>-gpu1.bin
+...
 ```
 
-Example:
+Convert a single file manually:
 
 ```bash
-profiling_result_run1_0.csv
-profiling_result_run1_1.csv
+./amd_smi_query --convert run1-gpu0.bin --csv run1-gpu0.csv
 ```
 
-CSV content includes:
+CSV columns:
 
-- `timestamp_ns`
-- `current_socket_power_W`
-- `inst_power_W`
-- `gfx_clock_MHz`
+| Column                   | Description                               |
+| ------------------------ | ----------------------------------------- |
+| `seq`                    | Sample sequence number                    |
+| `device_id`              | GPU device index                          |
+| `host_mono_ns`           | Host monotonic timestamp (ns)             |
+| `smi_ts_ns`              | SMI energy counter timestamp (ns)         |
+| `energy_count`           | Raw energy counter value                  |
+| `energy_resolution_uj`   | Energy counter resolution (µJ per count)  |
+| `current_socket_power_w` | SMI-reported socket power (W)             |
+| `inst_power_w`           | Instantaneous power from energy delta (W) |
+| `gfx_clock_mhz`          | GFX clock frequency (MHz)                 |
+| `flags`                  | Bitmask: see below                        |
 
-The sampler also prints one metadata line before the CSV header (device id, interval, energy counter resolution).
+### Flags bitmask
 
-## Principle (How It Works)
+| Bit | Meaning                               |
+| --- | ------------------------------------- |
+| `0` | Energy counter read failed            |
+| `1` | Power info read failed                |
+| `2` | Clock read failed                     |
+| `3` | Bad timing (energy delta unusable)    |
+| `4` | Sample dropped (ring buffer was full) |
 
-### 1. Power sampler (`power_query.cpp`)
+## How It Works
 
-The C++ program uses AMD SMI to:
+### Sampler (`amd_smi_query.cpp`)
 
-- Initialize AMD GPU management (`amdsmi_init`)
-- Enumerate GPU handles
-- Select one GPU by device index (`-d`)
-- Read energy counters (`amdsmi_get_energy_count`)
-- Read socket power (`amdsmi_get_power_info`)
-- Read GFX clock frequency (`amdsmi_get_clk_freq`)
-- Output samples as CSV at a fixed interval (`-i`)
+One **sampler thread** per GPU runs a tight fixed-interval loop using `clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME)` to avoid cumulative drift. Each iteration calls three AMD SMI APIs:
 
-It computes `inst_power_W` from the energy counter delta:
+- `amdsmi_get_energy_count` — energy counter + timestamp
+- `amdsmi_get_power_info` — socket power
+- `amdsmi_get_clk_freq` — GFX clock
 
-- `delta_energy` from consecutive energy counter readings
-- `delta_time` from consecutive timestamps
-- `power = delta_energy / delta_time`
+Instantaneous power is computed from the energy counter delta:
 
-This gives an instantaneous power estimate based on the energy counter, while `current_socket_power_W` is the direct SMI-reported value.
+```
+inst_power_W = (delta_energy_uJ × 1e-6) / (delta_time_ns × 1e-9)
+```
 
-### 2. Wrapper (`wrapper.py`)
+Samples are pushed into a **lock-free SPSC ring buffer** (power-of-two capacity, cache-line aligned head/tail). If the ring is full the sample is dropped and flagged — the sampler thread **never blocks**.
 
-The Python wrapper:
+A dedicated **writer thread** per GPU drains the ring in batches of 4096 records and writes binary output. After the run, files are `fsync`'d.
 
-- Parses the requested GPU IDs
-- Starts one `amd-smi-query` process per GPU
-- Redirects each sampler output to its own CSV file
+### Wrapper (`run_profiler.py`)
+
+- Starts a single `amd_smi_query` process covering all requested GPUs
 - Starts your target application
-- Waits for the application to finish
-- Sends `SIGINT` to samplers and waits for clean shutdown
-- Truncates any partial last CSV line (if a sampler was interrupted mid-write)
-
-This design keeps the sampler simple and lets you profile any command without modifying the application.
+- Waits for the application to finish, then sends `SIGINT` to the sampler
+- Optionally converts all `.bin` files to `.csv`
 
 ## Notes
 
-- Only tested on AMD HPCFund rocm-7.1.0
-
+- Only tested on AMD HPCFund ROCm 7.1.0
+- `--realtime` and `--mlock` require appropriate OS privileges (e.g. `CAP_SYS_NICE`, `CAP_IPC_LOCK`); failures are non-fatal warnings

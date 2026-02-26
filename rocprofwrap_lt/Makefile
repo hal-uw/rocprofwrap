@@ -1,7 +1,7 @@
 ROCM_DIR ?= /opt/rocm-7.1.0
 CXX ?= g++
-CXXFLAGS ?= -O2 -I$(ROCM_DIR)/include
-LDFLAGS ?= -L$(ROCM_DIR)/lib -lamd_smi
+CXXFLAGS ?= -O3 -I$(ROCM_DIR)/include
+LDFLAGS ?= -L$(ROCM_DIR)/lib -lamd_smi -pthread
 
 TARGET := amd-smi-query
 SRC := power_query.cpp
