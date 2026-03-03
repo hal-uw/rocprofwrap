@@ -165,8 +165,8 @@ static void PrintUsage(const char* prog) {
         "Sampling mode:\n"
         "  " << prog << " --device 0,1,2,3 --output-prefix myrun [options]\n\n"
         "  Output files:  myrun-gpu0.bin  myrun-gpu1.bin  ...\n"
-        "  CPU cores are assigned automatically (core 0 reserved for OS,\n"
-        "  sampler threads pinned to cores 1, 2, 3, ... in order).\n\n"
+        "  CPU cores are assigned automatically (sampler threads pinned to\n"
+        "  the last cores, counting down, to avoid interfering with workloads).\n\n"
         "  --device LIST       Comma-separated GPU device ids, e.g. \"0,1,2,3\"\n"
         "  --output-prefix P   Prefix for output filenames\n"
         "  --interval-us N     Sampling interval in µs (default 1000)\n"
@@ -586,17 +586,14 @@ static bool ParseArgs(int argc, char** argv, Options& opt) {
         return false;
     }
 
-    // Auto-assign CPU cores: skip core 0 (OS/system), assign sampler+writer
-    // pairs to consecutive cores starting from 1.
-    // Each GPU worker needs 2 threads (sampler + writer); we pin only the
-    // sampler thread (the latency-sensitive one) and let the writer float
-    // on the next core.
+    // Auto-assign CPU cores: pin sampler threads to the last cores to avoid
+    // interfering with the workload running on the first cores.
     {
         const int total_cpus = static_cast<int>(std::thread::hardware_concurrency());
-        int next_cpu = 1;  // reserve core 0 for the OS
+        int next_cpu = total_cpus - 1;  // start from the last core, count down
         for (auto& d : opt.devices) {
-            if (next_cpu < total_cpus) {
-                d.cpu_affinity = next_cpu++;
+            if (next_cpu >= 0) {
+                d.cpu_affinity = next_cpu--;
             } else {
                 // More GPUs than spare cores — fall back to no pinning for this one
                 d.cpu_affinity = -1;
