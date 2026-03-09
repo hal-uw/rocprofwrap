@@ -210,7 +210,6 @@ int main(int argc, char **argv) {
 
     std::cout << ts << "," << curr_socket_power_w << "," << inst_power_w
               << "," << gfx_clock_mhz << '\n';
-    std::cout.flush();
 
     prev_energy = energy;
     prev_ts = ts;

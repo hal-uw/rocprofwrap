@@ -10,7 +10,7 @@
 using json = nlohmann::json;
 
 namespace CounterConfig {
-    inline bool parseJsonConfig(const std::string& jsonFilePath, std::string (&hwCounters)[8]) {
+    inline bool parseJsonConfig(const std::string& jsonFilePath, std::string (&hwCounters)[2]) {
         try {
             std::ifstream jsonFile(jsonFilePath);
             if (!jsonFile.is_open()) {
@@ -28,11 +28,11 @@ namespace CounterConfig {
 
             auto& counters = configJson["counters"];
 
-            if (counters.size() > 8) {
-                std::cerr << "Warning: JSON file contains more than 8 counters. Only first 8 will be used." << std::endl;
+            if (counters.size() > 2) {
+                std::cerr << "Warning: JSON file contains more than 2 counters. Only first 2 will be used." << std::endl;
             }
 
-            int count = std::min(static_cast<size_t>(8), counters.size());
+            int count = std::min(static_cast<size_t>(2), counters.size());
             for (int i = 0; i < count; i++) {
                 hwCounters[i] = counters[i].get<std::string>();
             }
