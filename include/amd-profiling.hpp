@@ -148,7 +148,7 @@ void signal_callback_handler(int signum) { stop = 1; }
 
 void header(std::ofstream &output) {
 
-  std::string header = "avg_power,curr_socket_power,"
+  std::string header = "avg_power,curr_socket_power,energy_acc,"
     "temp_edge,temp_junct,temp_mem,"
     "gpu_busy_percent,mem_busy_percent,"
     "trg_sysclk,trg_dfclk,trg_dcefclk,trg_socclk,"
@@ -174,7 +174,7 @@ void header(std::ofstream &output) {
 
 void writeData(std::ofstream &output) {
 
-  output << power / 1000000.0 << "," << currPower / 1000000.0 << ",";
+  output << power / 1000000.0 << "," << currPower / 1000000.0 << "," << currEnergy << ",";
   output << tempEdgeG/1000.0 << "," << tempJunction/1000.0 << "," << tempMemory/1000.0 << ",";
   output << gpuBusyPercent << "," << memBusyPercent << ",";
   output << trgSysclk.frequency[trgSysclk.current]/1000000 << "," << trgDfclk.frequency[trgDfclk.current]/1000000 << ",";
@@ -214,7 +214,7 @@ void getData() {
 
   // rsmi sampling gpu metrics
   rsmi_dev_power_ave_get(device, 0, &power);
-  // rsmi_dev_energy_count_get(device, &currEnergy, &resolution, &etimeStamp);
+  rsmi_dev_energy_count_get(device, &currEnergy, &resolution, &etimeStamp);
   rsmi_dev_current_socket_power_get(device, &currPower);
   rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_EDGE, RSMI_TEMP_CURRENT, &tempEdgeG);
   rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_JUNCTION, RSMI_TEMP_CURRENT, &tempJunction);
