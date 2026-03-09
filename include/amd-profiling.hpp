@@ -50,14 +50,8 @@ float ePower = 0.0;
 
 ThreadPool pool(1);
 
-std::string hwCounters[8] = {
-    "SQ_INSTS_VALU_MFMA_F16",      "SQ_INSTS_VALU_MFMA_F32",
-    "SQ_INSTS_VALU_MFMA_F64",      "SQ_INSTS_VALU_MFMA_I8",
-    "SQ_INSTS_VALU_MFMA_MOPS_F16", "SQ_INSTS_VALU_MFMA_MOPS_F32",
-    "SQ_INSTS_VALU_MFMA_MOPS_F64", "SQ_INSTS_VALU_MFMA_MOPS_I8",
-    // "SQ_LDS_IDX_ACTIVE","SQ_LDS_BANK_CONFLICT","TCP_TOTAL_CACHE_ACCESSES_sum",
-    // "TCP_TCC_READ_REQ_sum","TCP_TCC_WRITE_REQ_sum","TCC_EA_RDREQ_DRAM_sum",
-    // "TCC_EA_WRREQ_DRAM_sum","TCC_EA_RDREQ_32B_sum","TCC_EA_WRREQ_64B_sum"
+std::string hwCounters[2] = {
+    "SQ_CYCLES", "SQ_BUSY_CYCLES",
 };
 
 // Functions
@@ -156,14 +150,11 @@ void signal_callback_handler(int signum) { stop = 1; }
 
 void header(std::ofstream &output) {
 
-  std::string header = "avg_power,curr_socket_power,power_from_e,vddgfx_volt,";
-  // "gpu_busy_percent,mem_busy_percent,"
-  // "vddgfx_volt,temp_edge,temp_junct,temp_mem,"
-  // "temp_hbm0,temp_hbm1,temp_hbm2,temp_hbm3,"
-  // "trg_sysclk,trg_dfclk,trg_dcefclk,trg_socclk,"
-  // "trg_memclk,trg_pcieclk,"
-  // "temp_vrgfx,temp_vrmem,temp_vrsoc,"
-  // "throttle_status,curr_uclk,";
+  std::string header = "avg_power,curr_socket_power,vddgfx_volt,"
+    "temp_edge,temp_junct,temp_mem,"
+    "temp_hbm0,temp_hbm1,temp_hbm2,temp_hbm3,"
+    "trg_sysclk,trg_dfclk,trg_dcefclk,trg_socclk,"
+    "trg_memclk,trg_pcieclk,";
 
   output << header;
 
@@ -201,24 +192,12 @@ void header(std::ofstream &output) {
 
 void writeData(std::ofstream &output) {
 
-  if (profItr > 0) {
-    ePower = resolution * (currEnergy - prevEnergy) / 1000000.0 /
-             ((timeStamp1 - prevTimeStamp) / 1000000000.0);
-  }
-  // add the voltage here
-  output << power / 1000000.0 << "," << currPower / 1000000.0 << "," << ePower << "," << currentVoltage << ",";
-  // output << gpuBusyPercent << "," << memBusyPercent << "," << currentVoltage
-  // << ","; output << tempEdge/1000.0 << "," << tempJunction/1000.0 << "," <<
-  // tempMemory/1000.0 << "," << tempHbm0/1000.0 << "," << tempHbm1/1000.0 <<
-  // ","; output << tempHbm2/1000.0 << "," << tempHbm3/1000.0 << ","; output <<
-  // trgSysclk.frequency[trgSysclk.current]/1000000 << "," <<
-  // trgDfclk.frequency[trgDfclk.current]/1000000 << ","; output <<
-  // trgDcefclk.frequency[trgDcefclk.current]/1000000 << "," <<
-  // trgSocclk.frequency[trgSocclk.current]/1000000 << ","; output <<
-  // trgMemclk.frequency[trgMemclk.current]/1000000 << "," <<
-  // trgPcieclk.frequency[trgPcieclk.current]/1000000 << ","; output <<
-  // tempVrgfx << "," << tempVrmem << "," << tempVrsoc << ","; output<<
-  // throttleStatus << "," << currUclk << ",";
+  output << power / 1000000.0 << "," << currPower / 1000000.0 << "," << currentVoltage << ",";
+  output << tempEdgeG/1000.0 << "," << tempJunction/1000.0 << "," << tempMemory/1000.0 << ",";
+  output << tempHbm0/1000.0 << "," << tempHbm1/1000.0 << "," << tempHbm2/1000.0 << "," << tempHbm3/1000.0 << ",";
+  output << trgSysclk.frequency[trgSysclk.current]/1000000 << "," << trgDfclk.frequency[trgDfclk.current]/1000000 << ",";
+  output << trgDcefclk.frequency[trgDcefclk.current]/1000000 << "," << trgSocclk.frequency[trgSocclk.current]/1000000 << ",";
+  output << trgMemclk.frequency[trgMemclk.current]/1000000 << "," << trgPcieclk.frequency[trgPcieclk.current]/1000000 << ",";
 
   // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
   //     output << currGfxclk[i] << ",";
@@ -266,40 +245,22 @@ void getData() {
 
   // rsmi sampling gpu metrics
   rsmi_dev_power_ave_get(device, 0, &power);
-  rsmi_dev_energy_count_get(device, &currEnergy, &resolution, &etimeStamp);
-  rsmi_status_t status = rsmi_dev_current_socket_power_get( device, &currPower);
-  if (status != RSMI_STATUS_SUCCESS) {
-    rsmi_status_string(status, &status_string);
-    std::cout << "Status description: " << status_string << std::endl;
-  }
-  // rsmi_dev_metrics_energy_acc_get(device, &accEnergy);
-  // rsmi_dev_busy_percent_get( device, &gpuBusyPercent );
-  // rsmi_dev_memory_busy_percent_get( device, &memBusyPercent );
-  rsmi_dev_volt_metric_get(device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT,&currentVoltage);
-  //rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_EDGE,
-  // RSMI_TEMP_CURRENT, &tempEdge ); rsmi_dev_temp_metric_get( device,
-  // RSMI_TEMP_TYPE_JUNCTION, RSMI_TEMP_CURRENT, &tempJunction );
-  // rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_MEMORY, RSMI_TEMP_CURRENT,
-  // &tempMemory ); rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_HBM_0,
-  // RSMI_TEMP_CURRENT, &tempHbm0 ); rsmi_dev_temp_metric_get( device,
-  // RSMI_TEMP_TYPE_HBM_1, RSMI_TEMP_CURRENT, &tempHbm1 );
-  // rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_HBM_2, RSMI_TEMP_CURRENT,
-  // &tempHbm2 ); rsmi_dev_temp_metric_get( device, RSMI_TEMP_TYPE_HBM_3,
-  // RSMI_TEMP_CURRENT, &tempHbm3 ); rsmi_dev_gpu_clk_freq_get( device,
-  // RSMI_CLK_TYPE_SYS, &trgSysclk); rsmi_dev_gpu_clk_freq_get( device,
-  // RSMI_CLK_TYPE_DF, &trgDfclk); rsmi_dev_gpu_clk_freq_get( device,
-  // RSMI_CLK_TYPE_DCEF, &trgDcefclk); rsmi_dev_gpu_clk_freq_get( device,
-  // RSMI_CLK_TYPE_SOC, &trgSocclk); rsmi_dev_gpu_clk_freq_get( device,
-  // RSMI_CLK_TYPE_MEM, &trgMemclk); rsmi_dev_gpu_clk_freq_get( device,
-  // RSMI_CLK_TYPE_PCIE, &trgPcieclk); rsmi_dev_metrics_temp_vrgfx_get( device,
-  // &tempVrgfx ); rsmi_dev_metrics_temp_vrmem_get( device, &tempVrmem );
-  // rsmi_dev_metrics_temp_vrsoc_get( device, &tempVrsoc );
-  // rsmi_dev_metrics_throttle_status_get( device,  &throttleStatus );
-  // rsmi_dev_metrics_curr_uclk_get( device, &currUclk );
-  // rsmi_dev_metrics_curr_gfxclk_get( device, &currGfxclk );
-  // rsmi_dev_metrics_curr_socclk_get( device, &currSocclk );
-  // rsmi_dev_metrics_curr_vclk0_get( device, &currVclk );
-  // rsmi_dev_metrics_curr_dclk0_get( device, &currDclk );
+  // rsmi_dev_energy_count_get(device, &currEnergy, &resolution, &etimeStamp);
+  rsmi_dev_current_socket_power_get(device, &currPower);
+  rsmi_dev_volt_metric_get(device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT, &currentVoltage);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_EDGE, RSMI_TEMP_CURRENT, &tempEdgeG);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_JUNCTION, RSMI_TEMP_CURRENT, &tempJunction);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_MEMORY, RSMI_TEMP_CURRENT, &tempMemory);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_0, RSMI_TEMP_CURRENT, &tempHbm0);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_1, RSMI_TEMP_CURRENT, &tempHbm1);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_2, RSMI_TEMP_CURRENT, &tempHbm2);
+  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_3, RSMI_TEMP_CURRENT, &tempHbm3);
+  rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_SYS, &trgSysclk);
+  rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_DF, &trgDfclk);
+  rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_DCEF, &trgDcefclk);
+  rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_SOC, &trgSocclk);
+  rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_MEM, &trgMemclk);
+  rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_PCIE, &trgPcieclk);
 
   pool.wait();
 }
