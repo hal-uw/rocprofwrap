@@ -36,9 +36,7 @@ uint64_t accEnergy;
 rsmi_frequencies_t trgSysclk, trgDfclk, trgDcefclk, trgSocclk, trgMemclk,
     trgPcieclk;
 
-int64_t currentVoltage;
-int64_t tempEdgeG, tempJunction, tempMemory, tempHbm0, tempHbm1, tempHbm2,
-    tempHbm3;
+int64_t tempEdgeG, tempJunction, tempMemory;
 
 uint64_t power;
 uint64_t prevEnergy = 0, currEnergy;
@@ -150,30 +148,14 @@ void signal_callback_handler(int signum) { stop = 1; }
 
 void header(std::ofstream &output) {
 
-  std::string header = "avg_power,curr_socket_power,vddgfx_volt,"
+  std::string header = "avg_power,curr_socket_power,"
     "temp_edge,temp_junct,temp_mem,"
-    "temp_hbm0,temp_hbm1,temp_hbm2,temp_hbm3,"
+    "gpu_busy_percent,mem_busy_percent,"
     "trg_sysclk,trg_dfclk,trg_dcefclk,trg_socclk,"
     "trg_memclk,trg_pcieclk,";
 
   output << header;
 
-  // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
-  //     output << "gfxclk" << i << ",";
-
-  // }
-  // for (int i = 0; i < RSMI_MAX_NUM_CLKS; i++){
-  //     output << "socclk" << i << ",";
-
-  // }
-  // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
-  //     output << "vclk" << i << ",";
-
-  // }
-  // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
-  //     output << "dclk" << i << ",";
-
-  // }
   // for (int i = 0; i < RSMI_MAX_NUM_XGMI_LINKS; i++){
   //     output << "xgmi_read_link" << i << ",";
 
@@ -192,25 +174,12 @@ void header(std::ofstream &output) {
 
 void writeData(std::ofstream &output) {
 
-  output << power / 1000000.0 << "," << currPower / 1000000.0 << "," << currentVoltage << ",";
+  output << power / 1000000.0 << "," << currPower / 1000000.0 << ",";
   output << tempEdgeG/1000.0 << "," << tempJunction/1000.0 << "," << tempMemory/1000.0 << ",";
-  output << tempHbm0/1000.0 << "," << tempHbm1/1000.0 << "," << tempHbm2/1000.0 << "," << tempHbm3/1000.0 << ",";
+  output << gpuBusyPercent << "," << memBusyPercent << ",";
   output << trgSysclk.frequency[trgSysclk.current]/1000000 << "," << trgDfclk.frequency[trgDfclk.current]/1000000 << ",";
   output << trgDcefclk.frequency[trgDcefclk.current]/1000000 << "," << trgSocclk.frequency[trgSocclk.current]/1000000 << ",";
   output << trgMemclk.frequency[trgMemclk.current]/1000000 << "," << trgPcieclk.frequency[trgPcieclk.current]/1000000 << ",";
-
-  // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
-  //     output << currGfxclk[i] << ",";
-  // }
-  // for (int i = 0; i < RSMI_MAX_NUM_CLKS; i++){
-  //     output << currSocclk[i] << ",";
-  // }
-  // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
-  //     output << currVclk[i] << ",";
-  // }
-  // for (int i = 0; i < RSMI_MAX_NUM_GFX_CLKS; i++){
-  //     output << currDclk[i] << ",";
-  // }
 
   // if (profItr > 0 ){
   //     for (int i = 0; i < RSMI_MAX_NUM_XGMI_LINKS; i++){
@@ -247,14 +216,11 @@ void getData() {
   rsmi_dev_power_ave_get(device, 0, &power);
   // rsmi_dev_energy_count_get(device, &currEnergy, &resolution, &etimeStamp);
   rsmi_dev_current_socket_power_get(device, &currPower);
-  rsmi_dev_volt_metric_get(device, RSMI_VOLT_TYPE_VDDGFX, RSMI_VOLT_CURRENT, &currentVoltage);
   rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_EDGE, RSMI_TEMP_CURRENT, &tempEdgeG);
   rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_JUNCTION, RSMI_TEMP_CURRENT, &tempJunction);
   rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_MEMORY, RSMI_TEMP_CURRENT, &tempMemory);
-  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_0, RSMI_TEMP_CURRENT, &tempHbm0);
-  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_1, RSMI_TEMP_CURRENT, &tempHbm1);
-  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_2, RSMI_TEMP_CURRENT, &tempHbm2);
-  rsmi_dev_temp_metric_get(device, RSMI_TEMP_TYPE_HBM_3, RSMI_TEMP_CURRENT, &tempHbm3);
+  rsmi_dev_busy_percent_get( device, &gpuBusyPercent );
+  rsmi_dev_memory_busy_percent_get( device, &memBusyPercent );
   rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_SYS, &trgSysclk);
   rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_DF, &trgDfclk);
   rsmi_dev_gpu_clk_freq_get(device, RSMI_CLK_TYPE_DCEF, &trgDcefclk);
