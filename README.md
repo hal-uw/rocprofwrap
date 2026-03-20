@@ -12,8 +12,8 @@ module load rocm/6.2.1
 
 ```
 export WRAPPER_ROOT=/work1/sinclair/rnjain/hal-uw/rocprofwrap
-export HSA_TOOLS_LIB=/opt/rocm-6.2.1/lib/librocprofiler64.so.1
-export LD_LIBRARY_PATH=/opt/rocm-6.2.1/lib/:$LD_LIBRARY_PATH
+export HSA_TOOLS_LIB=/opt/rocm-7.2.0/lib/librocprofiler64.so.2
+export LD_LIBRARY_PATH=/opt/rocm-7.2.0/lib/:$LD_LIBRARY_PATH
 make
 ```
 
