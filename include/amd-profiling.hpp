@@ -329,6 +329,9 @@ void rocprofSetup() {
     // Pre-allocate record buffer
     prof_records.resize(expected_record_count);
 
+    // Start context once; keep it running for the lifetime of profiling
+    ROCPROFILER_CALL(rocprofiler_start_context(prof_ctx), "start context");
+
     rocprof_initialized = true;
     std::cout << "rocprofiler-sdk initialized with " << counter_ids.size()
               << " counters (" << expected_record_count << " record slots)"
@@ -405,16 +408,10 @@ void getData() {
 
     // --- rocprofiler-sdk: hardware counters ---
     if (rocprof_initialized) {
-        // Start context, sample, stop context
-        rocprofiler_start_context(prof_ctx);
-
         size_t out_size = prof_records.size();
-        auto status = rocprofiler_sample_device_counting_service(
+        rocprofiler_sample_device_counting_service(
             prof_ctx, {}, ROCPROFILER_COUNTER_FLAG_NONE,
             prof_records.data(), &out_size);
-
-        rocprofiler_stop_context(prof_ctx);
-        // Silently ignore counter sampling errors
     }
 }
 
