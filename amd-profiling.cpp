@@ -6,6 +6,8 @@
 #include <vector>
 #include <signal.h>
 #include <thread>
+#include <unistd.h>
+#include <fcntl.h>
 #include"counter_config.hpp"
 #include "amd-profiling.hpp"
 
@@ -28,37 +30,40 @@ int main(int argc, char * argv[]){
     // Open file using string from command line
     output.open(argv[1], std::ios::out);
 
-    //parseYaml("configs/example.yaml");
-    // add a new parameter read from argv[4] to read json file (set the the hwCounter)
-    // read the json file from argv[4] and set the hwCounter
-
-    // Initialize the hardware counters
-
+    // Initialize the hardware counters from JSON config if provided
     if (argc >= 4) {
         if (!CounterConfig::parseJsonConfig(argv[3], hwCounters)) {
             std::cerr << "Warning: Failed to parse counter configuration file. Using default counters." << std::endl;
         }
         // print out the hwCounters at the console not in the file
         std::cout << "Using the following hardware counters:" << std::endl;
-        for (int i = 0; i < 8; i++) {
-            std::cout << hwCounters[i] << std::endl;
+        for (const auto& c : hwCounters) {
+            std::cout << c << std::endl;
         }
     }
-    hwCounterInit();
+
+    // Initialize amd-smi (replaces rsmi_init)
+    smiInit();
+
+    // Initialize rocprofiler-sdk via force_configure
+    // This triggers rocprofiler_configure() -> tool_init_callback() -> rocprofSetup()
+    // Must be called BEFORE any HIP call so HSA can be intercepted
+    // Suppress SDK permission warnings (ioctl.cpp) from polluting console.
+    // The warnings repeat on every sampling call, so keep stderr redirected
+    // for the entire program. All useful output goes to stdout or the CSV file.
+    int devnull = open("/dev/null", O_WRONLY);
+    if (devnull >= 0) { dup2(devnull, STDERR_FILENO); close(devnull); }
+
+    rocprofiler_force_configure(nullptr);
+
+    // Write CSV header
     header(output);
 
-    // Initialization of rsmi and rocprof
-    hipGetDeviceProperties(&devProp, device);
-    rocprofiler_initialize();
-
-
-    rocprofiler_device_profiling_session_create(&counters[0], counters.size(), &dp_session_id, device, 0);
-    rocprofiler_device_profiling_session_start(dp_session_id);
-
-
-    rsmi_init(0);
+    // HIP device properties (this triggers HSA initialization)
+    (void)hipGetDeviceProperties(&devProp, device);
 
     startTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
     // Profiling loop
     while(true) {
 
@@ -72,20 +77,23 @@ int main(int argc, char * argv[]){
 
         std::this_thread::sleep_for(std::chrono::nanoseconds(1000000-(timeStamp2-timeStamp1)));
 
-        //duration = (int)(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - timeStamp1);
-        //printf("Loop Cost:%d,%d\n", duration, (timeStamp2-timeStamp1));
-
         profItr++;
 
         if (stop) break;
     }
 
-    rocprofiler_device_profiling_session_stop(dp_session_id);
-    rocprofiler_device_profiling_session_destroy(dp_session_id);
+    // Cleanup rocprofiler-sdk
+    if (rocprof_initialized) {
+        rocprofiler_stop_context(prof_ctx);
+        rocprofiler_flush_buffer(prof_buf);
+        rocprofiler_destroy_counter_config(prof_config);
+    }
+
     output.close();
-    rsmi_shut_down();
+
+    // Cleanup amd-smi (replaces rsmi_shut_down)
+    amdsmi_shut_down();
+
     printf("gpuProf: Profiling process %d recieved a signal to stop profiling GPU %d.\n", (int) getpid(), device);
     return 0;
 }
-
-
