@@ -73,6 +73,7 @@ rocprofiler_agent_id_t          prof_agent_id = {};
 std::vector<rocprofiler_counter_record_t> prof_records;
 std::map<uint64_t, std::string>           counter_id_to_name;
 size_t expected_record_count = 0;
+size_t actual_record_count   = 0;   // updated each sample call
 bool   rocprof_initialized   = false;
 
 ThreadPool pool(1);
@@ -348,7 +349,10 @@ int tool_init_callback(rocprofiler_client_finalize_t, void*) {
 }
 
 void tool_fini_callback(void*) {
-    // Cleanup is done in main; this is a no-op
+    if (rocprof_initialized) {
+        rocprofiler_stop_context(prof_ctx);
+        rocprof_initialized = false;
+    }
 }
 
 // The rocprofiler_configure entry point (discovered by rocprofiler-sdk)
@@ -408,10 +412,10 @@ void getData() {
 
     // --- rocprofiler-sdk: hardware counters ---
     if (rocprof_initialized) {
-        size_t out_size = prof_records.size();
+        actual_record_count = prof_records.size();
         rocprofiler_sample_device_counting_service(
             prof_ctx, {}, ROCPROFILER_COUNTER_FLAG_NONE,
-            prof_records.data(), &out_size);
+            prof_records.data(), &actual_record_count);
     }
 }
 
@@ -447,7 +451,7 @@ void writeData(std::ofstream &output) {
             if (!name.empty()) aggregated[name] = 0.0;
         }
 
-        for (size_t i = 0; i < prof_records.size(); i++) {
+        for (size_t i = 0; i < actual_record_count; i++) {
             rocprofiler_counter_id_t cid = {.handle = 0};
             rocprofiler_query_record_counter_id(prof_records[i].id, &cid);
             auto it = counter_id_to_name.find(cid.handle);
