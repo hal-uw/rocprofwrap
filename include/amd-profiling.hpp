@@ -14,6 +14,7 @@
 #include <string.h>
 #include <thread_pool.h>
 #include <unistd.h>
+#include <deque>
 #include <map>
 #include <unordered_map>
 #include <atomic>
@@ -60,6 +61,14 @@ uint64_t currEnergy;
 uint64_t prevEnergy = 0;
 float    resolution;
 float    ePower = 0.0;
+
+// Energy history for windowed average power
+// Stores (wall_clock_ns, raw_energy_count) pairs at each 1ms sample
+struct EnergySnapshot {
+    uint64_t wall_ns;
+    uint64_t energy;
+};
+std::deque<EnergySnapshot> energy_history;
 
 // Timestamps
 uint64_t startTime, timeStamp1, timeStamp2, etimeStamp, prevTimeStamp;
@@ -377,7 +386,7 @@ rocprofiler_configure(uint32_t                 version,
 // ---------------------------------------------------------------------------
 void header(std::ofstream &output) {
     // Power columns first, then gfx_clk and gpu_busy, then counter columns, then timestamp
-    output << "socket_power,curr_socket_power,power_from_e,gfx_clk,gpu_busy,";
+    output << "socket_power,curr_socket_power,power_from_e,avg_power_2ms,avg_power_5ms,avg_power_10ms,gfx_clk,gpu_busy,";
 
     for (size_t i = 0; i < hwCounters.size(); i++) {
         if (!hwCounters[i].empty())
@@ -395,6 +404,15 @@ void getData() {
     amdsmi_get_power_info(gpu_processor_handle, &power_info);
     amdsmi_get_energy_count(gpu_processor_handle, &currEnergy,
                             &resolution, &etimeStamp);
+
+    // Record snapshot for windowed power calculation.
+    // etimeStamp from amd-smi is in nanoseconds (resolution 1 ns per docs).
+    // Using the hardware timestamp paired with currEnergy ensures ΔE and Δt
+    // are from the same hardware source, avoiding wall-clock poll-jitter error.
+    energy_history.push_back({etimeStamp, currEnergy});
+    while (energy_history.size() > 1 &&
+           etimeStamp - energy_history.front().wall_ns > 20000000ULL)
+        energy_history.pop_front();
 
     // --- amd-smi: GFX clock (MHz) ---
     amdsmi_status_t clk_status = amdsmi_get_clock_info(
@@ -437,9 +455,37 @@ void writeData(std::ofstream &output) {
     // Handle unsupported markers (UINT32_MAX = unsupported per amd-smi docs)
     if (curr_pwr == UINT32_MAX) curr_pwr = 0;
 
+    // Windowed average power over the last N ms.
+    // Uses etimeStamp (hardware-paired with currEnergy) as the "now" reference
+    // so ΔE and Δt both come from the same hardware source.
+    // history is sorted oldest→newest; always excludes the current entry.
+    uint64_t hw_now = etimeStamp;  // already in nanoseconds per amd-smi docs
+    auto windowed_power = [&](uint64_t window_ns) -> float {
+        if (energy_history.size() < 2) return 0.0f;
+        uint64_t target = hw_now - window_ns;
+        const EnergySnapshot* best = nullptr;
+        uint64_t best_dist = UINT64_MAX;
+        for (size_t i = 0; i + 1 < energy_history.size(); i++) {
+            uint64_t t = energy_history[i].wall_ns;
+            uint64_t dist = (t >= target) ? (t - target) : (target - t);
+            if (dist < best_dist) { best_dist = dist; best = &energy_history[i]; }
+        }
+        if (!best || hw_now <= best->wall_ns) return 0.0f;
+        uint64_t dt_ns = hw_now - best->wall_ns;
+        uint64_t de    = (currEnergy >= best->energy) ? (currEnergy - best->energy) : 0;
+        return resolution * (float)de / 1e6f / ((float)dt_ns / 1e9f);
+    };
+
+    float avg2  = windowed_power(2000000ULL);   //  2 ms
+    float avg5  = windowed_power(5000000ULL);   //  5 ms
+    float avg10 = windowed_power(10000000ULL);  // 10 ms
+
     output << socket_pwr << ","
            << curr_pwr << ","
            << ePower << ","
+           << avg2 << ","
+           << avg5 << ","
+           << avg10 << ","
            << gfx_clk_info.clk << ","
            << gpu_busy_percent << ",";
 
