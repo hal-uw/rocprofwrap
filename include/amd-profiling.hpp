@@ -55,6 +55,7 @@ amdsmi_processor_handle gpu_processor_handle;
 amdsmi_power_info_t     power_info;
 amdsmi_clk_info_t       gfx_clk_info;
 uint32_t                gpu_busy_percent = 0;
+amdsmi_gpu_metrics_t    gpu_metrics{};
 
 // Energy tracking
 uint64_t currEnergy;
@@ -385,8 +386,9 @@ rocprofiler_configure(uint32_t                 version,
 // CSV header
 // ---------------------------------------------------------------------------
 void header(std::ofstream &output) {
-    // Power columns first, then gfx_clk and gpu_busy, then counter columns, then timestamp
-    output << "socket_power,curr_socket_power,power_from_e,avg_power_2ms,avg_power_5ms,avg_power_10ms,gfx_clk,gpu_busy,";
+    // Power columns first, then gfx_clk, gpu_busy, and temperature, then counter columns, then timestamp
+    output << "socket_power,curr_socket_power,power_from_e,avg_power_2ms,avg_power_5ms,avg_power_10ms,"
+              "gfx_clk,gpu_busy,temp_edge_C,temp_hotspot_C,temp_mem_C,";
 
     for (size_t i = 0; i < hwCounters.size(); i++) {
         if (!hwCounters[i].empty())
@@ -426,6 +428,12 @@ void getData() {
         gpu_processor_handle, &gpu_busy_percent);
     if (busy_status != AMDSMI_STATUS_SUCCESS) {
         gpu_busy_percent = 0;
+    }
+
+    // --- amd-smi: GPU metrics table (temperature) ---
+    if (amdsmi_get_gpu_metrics_info(gpu_processor_handle, &gpu_metrics) !=
+        AMDSMI_STATUS_SUCCESS) {
+        gpu_metrics = {};  // zero-fill on failure, consistent with clk/busy handling above
     }
 
     // --- rocprofiler-sdk: hardware counters ---
@@ -488,6 +496,13 @@ void writeData(std::ofstream &output) {
            << avg10 << ","
            << gfx_clk_info.clk << ","
            << gpu_busy_percent << ",";
+
+    auto temp_or_zero = [](uint16_t raw) -> uint16_t {
+        return raw == UINT16_MAX ? 0 : raw;
+    };
+    output << temp_or_zero(gpu_metrics.temperature_edge) << ","
+           << temp_or_zero(gpu_metrics.temperature_hotspot) << ","
+           << temp_or_zero(gpu_metrics.temperature_mem) << ",";
 
     // Hardware counter values
     if (rocprof_initialized) {

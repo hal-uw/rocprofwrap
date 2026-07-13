@@ -87,8 +87,13 @@ CSV content includes:
 - `current_socket_power_W`
 - `inst_power_W`
 - `gfx_clock_MHz`
+- `temperature_edge_C`
+- `temperature_hotspot_C`
+- `temperature_mem_C`
 
-The sampler also prints one metadata line before the CSV header (device id, interval, energy counter resolution).
+Temperatures are in degrees Celsius. A sensor the device does not report shows up as `nan`.
+
+The sampler also prints one metadata line before the CSV header (device id, interval, energy counter resolution, and whether the GPU metrics table is available).
 
 ## Principle (How It Works)
 
@@ -102,6 +107,7 @@ The C++ program uses AMD SMI to:
 - Read energy counters (`amdsmi_get_energy_count`)
 - Read socket power (`amdsmi_get_power_info`)
 - Read GFX clock frequency (`amdsmi_get_clk_freq`)
+- Read edge/hotspot/memory temperatures from the GPU metrics table (`amdsmi_get_gpu_metrics_info`)
 - Output samples as CSV at a fixed interval (`-i`)
 
 It computes `inst_power_W` from the energy counter delta:

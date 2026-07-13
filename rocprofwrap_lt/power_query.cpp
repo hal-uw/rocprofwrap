@@ -102,6 +102,13 @@ bool GetGpuHandles(std::vector<amdsmi_processor_handle> *out) {
   return !out->empty();
 }
 
+// GPU metrics temperatures are already in whole degrees C; 0xFFFF means the
+// part does not report that sensor.
+double TempToCelsius(uint16_t raw) {
+  return raw == UINT16_MAX ? std::numeric_limits<double>::quiet_NaN()
+                           : static_cast<double>(raw);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -147,10 +154,17 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  amdsmi_gpu_metrics_t probe{};
+  const bool have_gpu_metrics =
+      amdsmi_get_gpu_metrics_info(handle, &probe) == AMDSMI_STATUS_SUCCESS;
+
   std::cout << "device_id=" << opt.device_id
             << " interval_ms=" << opt.interval_ms
-            << " counter_resolution_uJ=" << counter_resolution << "\n";
-  std::cout << "timestamp_ns,current_socket_power_W,inst_power_W,gfx_clock_MHz\n";
+            << " counter_resolution_uJ=" << counter_resolution
+            << " gpu_metrics=" << (have_gpu_metrics ? "ok" : "unsupported")
+            << "\n";
+  std::cout << "timestamp_ns,current_socket_power_W,inst_power_W,gfx_clock_MHz,"
+               "temperature_edge_C,temperature_hotspot_C,temperature_mem_C\n";
 
   int sample_idx = 0;
   while (!g_stop_requested.load() &&
@@ -204,12 +218,29 @@ int main(int argc, char **argv) {
       gfx_clock_mhz = (raw > 1.0e6) ? (raw / 1.0e6) : raw;
     }
 
+    double temp_edge_c = std::numeric_limits<double>::quiet_NaN();
+    double temp_hotspot_c = std::numeric_limits<double>::quiet_NaN();
+    double temp_mem_c = std::numeric_limits<double>::quiet_NaN();
+    if (have_gpu_metrics) {
+      amdsmi_gpu_metrics_t metrics{};
+      // Unlike the calls above, a failure here must not break the loop: wrapper.py
+      // merges stderr into the CSV, so per-sample logging would corrupt the data
+      // file. Leave the temperatures as NaN and keep sampling power.
+      if (amdsmi_get_gpu_metrics_info(handle, &metrics) ==
+          AMDSMI_STATUS_SUCCESS) {
+        temp_edge_c = TempToCelsius(metrics.temperature_edge);
+        temp_hotspot_c = TempToCelsius(metrics.temperature_hotspot);
+        temp_mem_c = TempToCelsius(metrics.temperature_mem);
+      }
+    }
+
     if (g_stop_requested.load()) {
       break;
     }
 
     std::cout << ts << "," << curr_socket_power_w << "," << inst_power_w
-              << "," << gfx_clock_mhz << '\n';
+              << "," << gfx_clock_mhz << "," << temp_edge_c << ","
+              << temp_hotspot_c << "," << temp_mem_c << '\n';
     std::cout.flush();
 
     prev_energy = energy;
