@@ -51,10 +51,14 @@ int main(int argc, char * argv[]){
     // Suppress SDK permission warnings (ioctl.cpp) from polluting console.
     // The warnings repeat on every sampling call, so keep stderr redirected
     // for the entire program. All useful output goes to stdout or the CSV file.
+    // Telemetry-only builds keep stderr, since there is no SDK to be noisy and
+    // amd-smi failures are otherwise invisible.
+#ifndef ROCPROFWRAP_NO_COUNTERS
     int devnull = open("/dev/null", O_WRONLY);
     if (devnull >= 0) { dup2(devnull, STDERR_FILENO); close(devnull); }
 
     rocprofiler_force_configure(nullptr);
+#endif
 
     // Write CSV header
     header(output);
@@ -83,11 +87,13 @@ int main(int argc, char * argv[]){
     }
 
     // Cleanup rocprofiler-sdk
+#ifndef ROCPROFWRAP_NO_COUNTERS
     if (rocprof_initialized) {
         rocprofiler_stop_context(prof_ctx);
         rocprofiler_flush_buffer(prof_buf);
         rocprofiler_destroy_counter_config(prof_config);
     }
+#endif
 
     output.close();
 

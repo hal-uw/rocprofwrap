@@ -1,4 +1,11 @@
+// ROCPROFWRAP_NO_COUNTERS: build telemetry only (power/clock/busy/temp via amd-smi),
+// with no rocprofiler-sdk dependency. Needed on machines whose ROCm predates the
+// rocprofiler-sdk v1 counter API used below (rocprofiler_counter_config_id_t and
+// friends are ROCm 7.x only; ROCm 6.x ships the older profile_config naming and
+// librocprofiler-sdk.so.0). The counter CSV columns are still emitted, zero-filled,
+// so the output schema is identical either way.
 #include "amd_smi/amdsmi.h"
+#ifndef ROCPROFWRAP_NO_COUNTERS
 #include <rocprofiler-sdk/rocprofiler.h>
 #include <rocprofiler-sdk/registration.h>
 #include <rocprofiler-sdk/agent.h>
@@ -7,6 +14,7 @@
 #include <rocprofiler-sdk/counters.h>
 #include <rocprofiler-sdk/counter_config.h>
 #include <rocprofiler-sdk/device_counting_service.h>
+#endif
 #include <fstream>
 #include <hip/hip_runtime.h>
 #include <iomanip>
@@ -28,6 +36,7 @@
 // ---------------------------------------------------------------------------
 // Macros
 // ---------------------------------------------------------------------------
+#ifndef ROCPROFWRAP_NO_COUNTERS
 #define ROCPROFILER_CALL(result, msg)                                          \
     {                                                                          \
         rocprofiler_status_t CHECKSTATUS = result;                             \
@@ -40,6 +49,7 @@
                       << ": " << _status_msg << std::endl;                    \
         }                                                                      \
     }
+#endif
 
 // ---------------------------------------------------------------------------
 // Global variables
@@ -54,6 +64,7 @@ uint32_t device;
 amdsmi_processor_handle gpu_processor_handle;
 amdsmi_power_info_t     power_info;
 amdsmi_clk_info_t       gfx_clk_info;
+amdsmi_clk_info_t       mem_clk_info;
 uint32_t                gpu_busy_percent = 0;
 amdsmi_gpu_metrics_t    gpu_metrics{};
 
@@ -76,6 +87,7 @@ uint64_t startTime, timeStamp1, timeStamp2, etimeStamp, prevTimeStamp;
 uint64_t profItr = 0;
 
 // rocprofiler-sdk state
+#ifndef ROCPROFWRAP_NO_COUNTERS
 rocprofiler_context_id_t        prof_ctx     = {};
 rocprofiler_buffer_id_t         prof_buf     = {};
 rocprofiler_counter_config_id_t prof_config  = {.handle = 0};
@@ -84,6 +96,9 @@ std::vector<rocprofiler_counter_record_t> prof_records;
 std::map<uint64_t, std::string>           counter_id_to_name;
 size_t expected_record_count = 0;
 size_t actual_record_count   = 0;   // updated each sample call
+#endif
+// Kept unconditionally so the getData()/writeData() branches read the same in
+// both builds; permanently false when counters are compiled out.
 bool   rocprof_initialized   = false;
 
 ThreadPool pool(1);
@@ -188,6 +203,7 @@ void smiInit() {
 // ---------------------------------------------------------------------------
 // rocprofiler-sdk: Helper functions
 // ---------------------------------------------------------------------------
+#ifndef ROCPROFWRAP_NO_COUNTERS
 
 // Enumerate available GPU agents
 std::vector<rocprofiler_agent_v0_t> get_gpu_agents() {
@@ -382,13 +398,15 @@ rocprofiler_configure(uint32_t                 version,
     return &cfg;
 }
 
+#endif  // ROCPROFWRAP_NO_COUNTERS
+
 // ---------------------------------------------------------------------------
 // CSV header
 // ---------------------------------------------------------------------------
 void header(std::ofstream &output) {
-    // Power columns first, then gfx_clk, gpu_busy, and temperature, then counter columns, then timestamp
+    // Power columns first, then gfx_clk, mem_clk, gpu_busy, and temperature, then counter columns, then timestamp
     output << "socket_power,curr_socket_power,power_from_e,avg_power_2ms,avg_power_5ms,avg_power_10ms,"
-              "gfx_clk,gpu_busy,temp_edge_C,temp_hotspot_C,temp_mem_C,";
+              "gfx_clk,mem_clk,gpu_busy,temp_edge_C,temp_hotspot_C,temp_mem_C,";
 
     for (size_t i = 0; i < hwCounters.size(); i++) {
         if (!hwCounters[i].empty())
@@ -423,6 +441,13 @@ void getData() {
         gfx_clk_info.clk = 0;
     }
 
+    // --- amd-smi: memory clock (MHz) ---
+    amdsmi_status_t mem_clk_status = amdsmi_get_clock_info(
+        gpu_processor_handle, AMDSMI_CLK_TYPE_MEM, &mem_clk_info);
+    if (mem_clk_status != AMDSMI_STATUS_SUCCESS) {
+        mem_clk_info.clk = 0;
+    }
+
     // --- amd-smi: GPU busy percent ---
     amdsmi_status_t busy_status = amdsmi_get_gpu_busy_percent(
         gpu_processor_handle, &gpu_busy_percent);
@@ -437,12 +462,14 @@ void getData() {
     }
 
     // --- rocprofiler-sdk: hardware counters ---
+#ifndef ROCPROFWRAP_NO_COUNTERS
     if (rocprof_initialized) {
         actual_record_count = prof_records.size();
         rocprofiler_sample_device_counting_service(
             prof_ctx, {}, ROCPROFILER_COUNTER_FLAG_NONE,
             prof_records.data(), &actual_record_count);
     }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -495,6 +522,7 @@ void writeData(std::ofstream &output) {
            << avg5 << ","
            << avg10 << ","
            << gfx_clk_info.clk << ","
+           << mem_clk_info.clk << ","
            << gpu_busy_percent << ",";
 
     auto temp_or_zero = [](uint16_t raw) -> uint16_t {
@@ -504,7 +532,9 @@ void writeData(std::ofstream &output) {
            << temp_or_zero(gpu_metrics.temperature_hotspot) << ","
            << temp_or_zero(gpu_metrics.temperature_mem) << ",";
 
-    // Hardware counter values
+    // Hardware counter values (zero-filled when unavailable, so the column
+    // layout is the same whether or not counters were compiled in)
+#ifndef ROCPROFWRAP_NO_COUNTERS
     if (rocprof_initialized) {
         // Aggregate counter values by counter name (sum across instances)
         std::map<std::string, double> aggregated;
@@ -526,7 +556,9 @@ void writeData(std::ofstream &output) {
                 output << (uint64_t)aggregated[name] << ",";
             }
         }
-    } else {
+    } else
+#endif
+    {
         for (size_t i = 0; i < hwCounters.size(); i++) {
             if (!hwCounters[i].empty()) output << "0,";
         }

@@ -54,9 +54,13 @@ if "WRAPPER_ROOT" not in os.environ:
     sys.exit()
 
 
+# Collector binary name, so a telemetry-only build (gpuprof_telemetry, for ROCm
+# versions without the v1 counter API) can be used without editing this script.
+GPUPROF_BIN = os.getenv("GPUPROF_BIN", "gpuprof")
+
 try:
     for gid in GPUS:
-        ps = [os.getenv("WRAPPER_ROOT")+"/gpuprof", PREFIX+"_"+gid, gid]
+        ps = [os.path.join(os.getenv("WRAPPER_ROOT"), GPUPROF_BIN), PREFIX+"_"+gid, gid]
 
         # Add counters file if provided
         if COUNTERS_FILE is not None:
