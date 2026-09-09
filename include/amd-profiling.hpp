@@ -65,6 +65,7 @@ amdsmi_processor_handle gpu_processor_handle;
 amdsmi_power_info_t     power_info;
 amdsmi_clk_info_t       gfx_clk_info;
 amdsmi_clk_info_t       mem_clk_info;
+amdsmi_clk_info_t       df_clk_info;
 uint32_t                gpu_busy_percent = 0;
 amdsmi_gpu_metrics_t    gpu_metrics{};
 
@@ -404,9 +405,9 @@ rocprofiler_configure(uint32_t                 version,
 // CSV header
 // ---------------------------------------------------------------------------
 void header(std::ofstream &output) {
-    // Power columns first, then gfx_clk, mem_clk, gpu_busy, and temperature, then counter columns, then timestamp
+    // Power columns first, then gfx_clk, mem_clk, df_clk, gpu_busy, and temperature, then counter columns, then timestamp
     output << "socket_power,curr_socket_power,power_from_e,avg_power_2ms,avg_power_5ms,avg_power_10ms,"
-              "gfx_clk,mem_clk,gpu_busy,temp_edge_C,temp_hotspot_C,temp_mem_C,";
+              "gfx_clk,mem_clk,df_clk,gpu_busy,temp_edge_C,temp_hotspot_C,temp_mem_C,";
 
     for (size_t i = 0; i < hwCounters.size(); i++) {
         if (!hwCounters[i].empty())
@@ -446,6 +447,16 @@ void getData() {
         gpu_processor_handle, AMDSMI_CLK_TYPE_MEM, &mem_clk_info);
     if (mem_clk_status != AMDSMI_STATUS_SUCCESS) {
         mem_clk_info.clk = 0;
+    }
+
+    // --- amd-smi: Data Fabric clock (MHz) ---
+    amdsmi_status_t df_clk_status = amdsmi_get_clock_info(
+        gpu_processor_handle, AMDSMI_CLK_TYPE_DF, &df_clk_info);
+    if (df_clk_status != AMDSMI_STATUS_SUCCESS || df_clk_info.clk == UINT32_MAX) {
+        // UINT32_MAX = unsupported marker per amd-smi docs (same convention as
+        // curr_socket_power below) -- DF clock is not exposed via this call on
+        // every ASIC (e.g. gfx950/MI350X).
+        df_clk_info.clk = 0;
     }
 
     // --- amd-smi: GPU busy percent ---
@@ -523,6 +534,7 @@ void writeData(std::ofstream &output) {
            << avg10 << ","
            << gfx_clk_info.clk << ","
            << mem_clk_info.clk << ","
+           << df_clk_info.clk << ","
            << gpu_busy_percent << ",";
 
     auto temp_or_zero = [](uint16_t raw) -> uint16_t {
